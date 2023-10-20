@@ -1,8 +1,8 @@
 """Zuli Command Suite (or for short, zcs) provides a handy way to generate and
 interpret Zuli protocol packets.
 """
+from typing import List
 import datetime
-from struct import Struct
 
 CMD_RESET = 2
 CMD_VERSION_READ = 6
@@ -87,47 +87,68 @@ def parse_read_power(response: bytearray) -> int:
     and fails if the packet is malformed"""
     return int.from_bytes(response[2:]) / 1e20
 
-def add_schedule(id: int, time: datetime.time, turn_off=False, weekdays=127,
-                 enabled=True) -> bytearray:
-    """Creates a packet to push a new schedule to the smartplug
-    
-    :param id: Unsure if this must be sequential or if using an existing id
-        will overwrite
-    :param time: The execution time of the schedule
-    :param weekdays: A integer between 0 (no days) and 127 (all days) that as a
-        bitfield represents the days of the week on which the schedule will
-        trigger
-    """
-    group_id = id
-    action = 2 if turn_off else 1
-    flags = 1 if enabled else 0
-    weekdays = min(127, max(0, weekdays))
-    schedule_id = 0
-    return bytearray([CMD_SCHEDULE_ADD, group_id, action, 0, 0, time.hour,
-                      time.minute, time.second, weekdays, flags, schedule_id])
+class Schedule():
+    """A representation of a schedule that can be used to turn a smartplug on
+    or off at a specific time"""
+    ACTION_ON = 1
+    ACTION_OFF = 2
 
-class Schedule(Struct):
-    id: int
-    action: int
-    time: datetime.time
-    weekdays: int
-    flags: int
-    schedule_id = 0
-
-    def __init__(self, id, time, turn_off=False, weekdays=127, enabled=True):
+    def __init__(self, id: int, time: datetime.time, action=ACTION_ON,
+                 weekdays=[True] * 7, enabled=True, schedule_id=0):
         self.id = id
-        self.turn_off = turn_off
+        self.action = action
         self.time = time
         self.weekdays = weekdays
         self.enabled = enabled
+        self.schedule_id = schedule_id
 
-    def __init__(self, raw: bytearray):
-        id = int.from_bytes(raw[0])
-        turn_off = raw[1] != 1
+    def from_bytes(raw: bytearray):
+        id = raw[0]
+        action = raw[1]
         time = datetime.time(hour=raw[4], minute=raw[5], second=raw[6])
-        weekdays = raw[7]
+        # Represented from index 0 == Monday ... 6 == Sunday as does datetime,
+        # note that this is a departure from the way the smartplugs consider
+        # Sunday to be the first day of the week
+        weekdays = []
+        for i in range(7):
+            # Account for weeks beginning on different days
+            i = (i + 1) % 7
+            bitflag = 1 << i
+            weekdays.append(raw[7] & bitflag == bitflag)
         enabled = raw[8] == 1
+        schedule_id = raw[9]
+        return Schedule(id, time, action=action, weekdays=weekdays,
+                        enabled=enabled, schedule_id=schedule_id)
 
-    def to_bytes() -> bytearray:
-        return bytearray([id, action, 0, 0, time.hour,
-                      time.minute, time.second, weekdays, flags, schedule_id])
+    def to_bytes(self) -> bytearray:
+        weekdays = 0
+        for i in range(7):
+            # Account for weeks beginning on different days
+            shift = (i + 1) % 7
+            bitflag = self.weekdays[i] << shift
+            weekdays |= bitflag
+        return bytearray([self.id, self.action, 0, 0, self.time.hour,
+                      self.time.minute, self.time.second, weekdays,
+                      self.enabled, self.schedule_id])
+    
+    def as_anonymous(self) -> bytearray:
+        """Returns a trimmed byte representation of the schedule without
+        identifiers, useful when removing schedules"""
+        raw = self.to_bytes()
+        return raw[1:9]
+
+def add_schedule(schedule: Schedule) -> bytearray:
+    """Creates a packet to push a new schedule to the smartplug
+    """
+    packet = bytearray([CMD_SCHEDULE_ADD])
+    packet.extend(schedule.to_bytes())
+    return packet
+
+def get_schedule() -> bytearray:
+    """Creates a packet to get a single schedule saved to the smartplug"""
+    return bytearray([CMD_SCHEDULE_GET])
+
+def parse_get_schedule(response: bytearray) -> Schedule:
+    """Returns a single schedule from a get schedule packet and fails if the
+    packet is malformed"""
+    return Schedule.from_bytes(response[2:])
