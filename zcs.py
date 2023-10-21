@@ -35,9 +35,9 @@ def on(brightness = 0) -> bytearray:
     """Creates a packet to turn a smartplug on, optionally at a specified
     brightness
     
-    :param brightness: a number between 0 and 100; note that this defaults to
-        0, which is functionally equivalent to 100; this is ignored by the
-        smartplug if the smartplug is in appliance mode"""
+    :param brightness: a number between 0 and 100 (otherwise will be trimmed);
+        note that this defaults to 0, which is functionally equivalent to 100;
+        brightness is ignored by the smartplug when in appliance mode"""
     brightness = min(100, max(0, brightness))
     return bytearray([CMD_ON, 0, 0, 0, 0, brightness, 0, 0, 0])
 

@@ -1,57 +1,41 @@
-import asyncio, datetime
+import asyncio, datetime, zcs
 from bleak import BleakScanner, BleakClient
 
-class Operation:
-    def __init__(self, id, does_read=False):
-        self.id = id
-        self.does_read = does_read
-
+DISCOVER_DURATION = 4
 ZULI_SERVICE = '04ee929b-bb13-4e77-8160-18552daf06e1'
 COMMAND_PIPE = 'ffffff03-bb13-4e77-8160-18552daf06e1'
-PIPE_OPERATIONS = {
-    "on" : Operation(b'\x17'),
-    "off" : Operation(b'\x18'),
-    "mode" : Operation(b'\x10'),
-    "power" : Operation(b'\x20', does_read=True),
-    "time" : Operation(b'\x09', does_read=True),
-    "synctime" : Operation(b'\x08')
-}
 
-def build_pipe_operation(command, args):
-    data = bytearray(PIPE_OPERATIONS[command].id)
+def build_packet(command, args):
     if command == "on":
-        brightness = 100
-        if len(args) > 0:
-            brightness = min(100, max(1, int(args[0])))
-        data.extend(b'\x00\x00\x00\x00')
-        data.extend(brightness.to_bytes(1))
-        data.extend(b'\x00\x00\x00')
+        # TODO: What if there are no arguments?
+        return zcs.on(int(args[0]))
     elif command == "off":
-        data.extend(b'\x00\x00\x00')
+        return zcs.off()
     elif command == "mode":
-        mode = 0
-        if len(args) > 0:
-            mode = min(1, max(0, int(args[0])))
-        data.extend(mode.to_bytes(1))
+        return zcs.set_mode(args[0] != "dimmable")
+    elif command == "power":
+        return zcs.read_power()
+    elif command == "time":
+        return zcs.get_clock()
     elif command == "synctime":
         now = datetime.datetime.today()
-        data.extend(now.year.to_bytes(2))
-        data.extend(bytearray([now.month, now.day, (now.weekday() + 2) % 7, now.hour, now.minute, now.second]))
-    return data
+        return zcs.set_clock(now)
+    elif command == "write":
+        return bytearray.fromhex(args[0])
 
-def read_pipe_operation(command, device, response):
+def parse_packet(command, device, response):
+    print(f"{device.address} : {response.hex()}")
     if command == "power":
-        power = int.from_bytes(response) / 1e20
-        print(f"{device.address} is consuming {round(power, 2)} watts")
+        power = zcs.parse_read_power(response)
+        print(f"\tDevice is consuming {round(power, 2)} watts")
     elif command == "time":
-        year = int.from_bytes(response[1:3])
-        time = datetime.datetime(year, month=response[3], day=response[4], hour=response[6], minute=response[7], second=response[8])
-        print(f"It is {time.ctime()} at {device.address}")
+        time = zcs.parse_get_clock(response)
+        print(f"\tIt is {time.ctime()}")
 
 async def main():
     async with BleakScanner() as scanner:
         print("Discovering devices")
-        await asyncio.sleep(4)
+        await asyncio.sleep(DISCOVER_DURATION)
 
     tracked_devices = []
     for (device, advertising_data) in scanner.discovered_devices_and_advertisement_data.values():
@@ -62,30 +46,21 @@ async def main():
     if len(tracked_devices) > 0:
         try:
             await asyncio.gather(*[client.connect() for client in tracked_devices])
-            print("Ready. Available commands are ", '|'.join(PIPE_OPERATIONS), "|read|write", sep='')
+            print("Ready. Available commands are on|off|mode|power|time|synctime|write")
             while True:
                 raw_command = input("Enter command: ")
                 args = raw_command.split(" ", maxsplit=1)
                 command = args[0]
-                if command in PIPE_OPERATIONS:
-                    data = build_pipe_operation(command, args[1:])
-                    await asyncio.gather(*[client.write_gatt_char(COMMAND_PIPE, data=data, response=True) for client in tracked_devices])
-                    if PIPE_OPERATIONS[command].does_read:
-                        async def read(client):
-                            response = await client.read_gatt_char(COMMAND_PIPE)
-                            read_pipe_operation(command, client, response[1:])
-                        await asyncio.gather(*[read(client) for client in tracked_devices])
-                elif command == "write" or command == "read":
-                    if len(args) > 1:
-                        data = bytearray.fromhex(args[1])
-                        await asyncio.gather(*[client.write_gatt_char(COMMAND_PIPE, data=data, response=True) for client in tracked_devices])
-                        if command == "read":
-                            async def read(client):
-                                response = await client.read_gatt_char(COMMAND_PIPE)
-                                print(f"{client.address} : {response.hex()}")
-                            await asyncio.gather(*[read(client) for client in tracked_devices])
-                elif command == "disconnect":
+                if command == "disconnect":
                     break
+                packet = build_packet(command, args[1:])
+                async def send(client, packet):
+                    await client.write_gatt_char(COMMAND_PIPE, data=packet,
+                                           response=True)
+                    response = await client.read_gatt_char(COMMAND_PIPE)
+                    parse_packet(command, client, response)
+                await asyncio.gather(*[send(client, packet) for client in
+                                       tracked_devices])
         except Exception as e:
             print(e)
         finally:
