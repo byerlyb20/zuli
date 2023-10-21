@@ -92,6 +92,7 @@ class Schedule():
     or off at a specific time"""
     ACTION_ON = 1
     ACTION_OFF = 2
+    WEEKDAY_SYMBOL = "MTWTFSS"
 
     def __init__(self, id: int, time: datetime.time, action=ACTION_ON,
                  weekdays=[True] * 7, enabled=True, schedule_id=0):
@@ -136,6 +137,16 @@ class Schedule():
         identifiers, useful when removing schedules"""
         raw = self.to_bytes()
         return raw[1:9]
+    
+    def __str__(self):
+        weekdays_sym = []
+        for i in range(7):
+            if self.weekdays[i]:
+                weekdays_sym.append(self.WEEKDAY_SYMBOL[i])
+        weekdays_str = "".join(weekdays_sym)
+        action_str = "Turn On" if self.action == self.ACTION_ON else "Turn Off"
+        enabled_str = "Enabled" if self.enabled else "Disabled"
+        return f"{action_str} {weekdays_str} at {self.time.isoformat()} ({enabled_str})"
 
 def add_schedule(schedule: Schedule) -> bytearray:
     """Creates a packet to push a new schedule to the smartplug
@@ -144,11 +155,29 @@ def add_schedule(schedule: Schedule) -> bytearray:
     packet.extend(schedule.to_bytes())
     return packet
 
-def get_schedule() -> bytearray:
-    """Creates a packet to get a single schedule saved to the smartplug"""
-    return bytearray([CMD_SCHEDULE_GET])
+def get_schedule(i: int) -> bytearray:
+    """Creates a packet to get a single schedule saved to the smartplug
+
+    This packet will typically be sent n times, n being the number of schedules
+    saved to the smartplug, after first sending a get schedule info packet to
+    determine the value of n.
+    
+    :param i: a number between 1 and the number of schedules on the smartplug;
+        the number that corresponds to a specific schedule does not stay the
+        same between operations that change schedules
+    """
+    return bytearray([CMD_SCHEDULE_GET, i])
 
 def parse_get_schedule(response: bytearray) -> Schedule:
     """Returns a single schedule from a get schedule packet and fails if the
     packet is malformed"""
     return Schedule.from_bytes(response[2:])
+
+def get_schedule_info() -> bytearray:
+    """Creates a packet to get schedule info"""
+    return bytearray([CMD_SCHEDULE_INFO_GET, 0])
+
+def parse_get_schedule_info(response: bytearray) -> tuple:
+    """Returns a tuple of the number of events and the maximum supported number
+    and fails if the packet is malformed"""
+    return (response[2], response[3])

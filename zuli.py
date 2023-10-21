@@ -20,6 +20,10 @@ def build_packet(command, args):
     elif command == "synctime":
         now = datetime.datetime.today()
         return zcs.set_clock(now)
+    elif command == "schedule":
+        return zcs.get_schedule(int(args[0]))
+    elif command == "schedules":
+        return zcs.get_schedule_info()
     elif command == "write":
         return bytearray.fromhex(args[0])
 
@@ -28,6 +32,12 @@ def parse_packet(command, device, response):
     if command == "power":
         power = zcs.parse_read_power(response)
         print(f"\tDevice is consuming {round(power, 2)} watts")
+    elif command == "schedule":
+        schedule = zcs.parse_get_schedule(response)
+        print(f"\t{schedule}")
+    elif command == "schedules":
+        info = zcs.parse_get_schedule_info(response)
+        print(f"\t{info[0]} out of {info[1]} supported schedule(s)")
     elif command == "time":
         time = zcs.parse_get_clock(response)
         print(f"\tIt is {time.ctime()}")
@@ -46,7 +56,7 @@ async def main():
     if len(tracked_devices) > 0:
         try:
             await asyncio.gather(*[client.connect() for client in tracked_devices])
-            print("Ready. Available commands are on|off|mode|power|time|synctime|write")
+            print("Ready. Available commands are on|off|mode|power|time|synctime|schedule|schedules|write")
             while True:
                 raw_command = input("Enter command: ")
                 args = raw_command.split(" ", maxsplit=1)
