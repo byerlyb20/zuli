@@ -1,46 +1,42 @@
-import asyncio, datetime, zcs
+import asyncio, zcs
 from bleak import BleakScanner, BleakClient
 
 DISCOVER_DURATION = 4
 ZULI_SERVICE = '04ee929b-bb13-4e77-8160-18552daf06e1'
 COMMAND_PIPE = 'ffffff03-bb13-4e77-8160-18552daf06e1'
 
-def build_packet(command, args):
-    if command == "on":
-        # TODO: What if there are no arguments?
-        return zcs.on(int(args[0]))
-    elif command == "off":
-        return zcs.off()
-    elif command == "mode":
-        return zcs.set_mode(args[0] != "dimmable")
-    elif command == "power":
-        return zcs.read_power()
-    elif command == "time":
-        return zcs.get_clock()
-    elif command == "synctime":
-        now = datetime.datetime.today()
-        return zcs.set_clock(now)
-    elif command == "schedule":
-        return zcs.get_schedule(int(args[0]))
-    elif command == "schedules":
-        return zcs.get_schedule_info()
-    elif command == "write":
-        return bytearray.fromhex(args[0])
+TRANSLATION_LAYER = {
+    "on": (zcs.on, lambda a : []),
+    "brightness": (zcs.on, lambda a : [int(a[1])]),
+    "off": (zcs.off, lambda a : []),
+    "mode": (zcs.set_mode, lambda a : [a[1] != "dimmable"]),
+    "power": (zcs.read_power, lambda a : [], zcs.parse_read_power),
+    "time": (zcs.get_clock, lambda a : [], zcs.parse_get_clock),
+    "synctime": (zcs.set_clock, lambda a : []),
+    "schedule": (zcs.get_schedule, lambda a : [int(a[1])], zcs.parse_get_schedule),
+    "schedules": (zcs.get_schedule_info, lambda a : [], zcs.parse_get_schedule_info),
+    "write": (lambda a : a, lambda a : [bytearray.fromhex(a[1])])
+}
 
-def parse_packet(command, device, response):
-    print(f"{device.address} : {response.hex()}")
-    if command == "power":
-        power = zcs.parse_read_power(response)
-        print(f"\tDevice is consuming {round(power, 2)} watts")
-    elif command == "schedule":
-        schedule = zcs.parse_get_schedule(response)
-        print(f"\t{schedule}")
-    elif command == "schedules":
-        info = zcs.parse_get_schedule_info(response)
-        print(f"\t{info[0]} out of {info[1]} supported schedule(s)")
-    elif command == "time":
-        time = zcs.parse_get_clock(response)
-        print(f"\tIt is {time.ctime()}")
+async def do(args, device):
+    # Use the translation layer to "translate" command line input to a zcs
+    # method call with appropriate arguments
+    translation = TRANSLATION_LAYER[args[0]]
+    packet = translation[0](*translation[1](args))
+
+    # Write to and then read from the smartplug
+    await device.write_gatt_char(COMMAND_PIPE, data=packet, response=True)
+    raw = await device.read_gatt_char(COMMAND_PIPE)
+
+    # Always print out the raw response
+    print(f"{device.address} : {raw.hex()}")
+
+    # Print error number (if any) and the zcs parsed response
+    status = zcs.parse_response(raw)
+    if status[1] != zcs.STATUS_SUCCESS:
+        print(f"\tDevice reported error {status[1]}")
+    elif len(translation) == 3:
+        print(f"\t{translation[2](raw)}")
 
 async def main():
     async with BleakScanner() as scanner:
@@ -60,17 +56,10 @@ async def main():
             while True:
                 raw_command = input("Enter command: ")
                 args = raw_command.split(" ", maxsplit=1)
-                command = args[0]
-                if command == "disconnect":
+                if args[0] == "disconnect":
                     break
-                packet = build_packet(command, args[1:])
-                async def send(client, packet):
-                    await client.write_gatt_char(COMMAND_PIPE, data=packet,
-                                           response=True)
-                    response = await client.read_gatt_char(COMMAND_PIPE)
-                    parse_packet(command, client, response)
-                await asyncio.gather(*[send(client, packet) for client in
-                                       tracked_devices])
+                else:
+                    await asyncio.gather(*[do(args, client) for client in tracked_devices])
         except Exception as e:
             print(e)
         finally:

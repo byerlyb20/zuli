@@ -31,6 +31,18 @@ CMD_SCHEDULE_REMOVE_ALL = 53
 CMD_BOOKMARK = 126
 CMD_BATCH = 127
 
+STATUS_SUCCESS = 0
+STATUS_BUSY = 5
+STATUS_INVALID_PARAM = 6
+STATUS_BAD_LENGTH = 15
+STATUS_ALREADY_SET = 9
+
+def parse_response(response: bytearray) -> tuple:
+    """Returns a tuple containing the response command and the response status,
+    effectively returning the first and second bytes in the response as a
+    tuple"""
+    return (response[0], response[1])
+
 def on(brightness = 0) -> bytearray:
     """Creates a packet to turn a smartplug on, optionally at a specified
     brightness
@@ -62,9 +74,10 @@ def set_clock(time = datetime.datetime.today()) -> bytearray:
     Smartplugs track their own system time for use with schedules, though this
     time does not persist past power cycles.
     """
+    year = time.year.to_bytes(2)
     weekday = (time.weekday() + 2) % 7
-    return bytearray([CMD_CLOCK_SET, time.month, time.day, weekday, time.hour,
-                      time.minute, time.second])
+    return bytearray([CMD_CLOCK_SET, year[0], year[1], time.month, time.day,
+                      weekday, time.hour, time.minute, time.second])
 
 def get_clock() -> bytearray:
     """Creates a packet to poll the current system time on a smartplug"""
@@ -139,14 +152,12 @@ class Schedule():
         return raw[1:9]
     
     def __str__(self):
-        weekdays_sym = []
-        for i in range(7):
-            if self.weekdays[i]:
-                weekdays_sym.append(self.WEEKDAY_SYMBOL[i])
-        weekdays_str = "".join(weekdays_sym)
+        weekdays_sym = map(lambda i : self.WEEKDAY_SYMBOL[i]
+                           if self.weekdays[i] else "-", range(7))
+        weekdays_str = " ".join(weekdays_sym)
         action_str = "Turn On" if self.action == self.ACTION_ON else "Turn Off"
         enabled_str = "Enabled" if self.enabled else "Disabled"
-        return f"{action_str} {weekdays_str} at {self.time.isoformat()} ({enabled_str})"
+        return f"{action_str}  {weekdays_str}  at {self.time.isoformat()} ({enabled_str})"
 
 def add_schedule(schedule: Schedule) -> bytearray:
     """Creates a packet to push a new schedule to the smartplug
