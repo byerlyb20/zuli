@@ -1,4 +1,5 @@
 import asyncio, zcs
+from datetime import datetime
 from bleak import BleakScanner, BleakClient
 
 DISCOVER_DURATION = 4
@@ -12,7 +13,7 @@ TRANSLATION_LAYER = {
     "mode": (zcs.set_mode, lambda a : [a[1] != "dimmable"]),
     "power": (zcs.read_power, lambda a : [], zcs.parse_read_power),
     "time": (zcs.get_clock, lambda a : [], zcs.parse_get_clock),
-    "synctime": (zcs.set_clock, lambda a : []),
+    "synctime": (zcs.set_clock, lambda a : [datetime.today()]),
     "schedule": (zcs.get_schedule, lambda a : [int(a[1])], zcs.parse_get_schedule),
     "schedules": (zcs.get_schedule_info, lambda a : [], zcs.parse_get_schedule_info),
     "write": (lambda a : a, lambda a : [bytearray.fromhex(a[1])])

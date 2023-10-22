@@ -75,7 +75,7 @@ def set_clock(time = datetime.datetime.today()) -> bytearray:
     time does not persist past power cycles.
     """
     year = time.year.to_bytes(2)
-    weekday = (time.weekday() + 2) % 7
+    weekday = ((time.weekday() + 1) % 7) + 1
     return bytearray([CMD_CLOCK_SET, year[0], year[1], time.month, time.day,
                       weekday, time.hour, time.minute, time.second])
 
