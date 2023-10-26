@@ -1,70 +1,77 @@
-import asyncio, zcs
+import asyncio
+import zcs
+import smartplug
+import sys
 from datetime import datetime
-from bleak import BleakScanner, BleakClient
-
-DISCOVER_DURATION = 4
-ZULI_SERVICE = '04ee929b-bb13-4e77-8160-18552daf06e1'
-COMMAND_PIPE = 'ffffff03-bb13-4e77-8160-18552daf06e1'
+from bleak import BleakScanner
 
 TRANSLATION_LAYER = {
-    "on": (zcs.on, lambda a : []),
-    "brightness": (zcs.on, lambda a : [int(a[1])]),
-    "off": (zcs.off, lambda a : []),
-    "mode": (zcs.set_mode, lambda a : [a[1] != "dimmable"]),
-    "power": (zcs.read_power, lambda a : [], zcs.parse_read_power),
-    "time": (zcs.get_clock, lambda a : [], zcs.parse_get_clock),
-    "synctime": (zcs.set_clock, lambda a : [datetime.today()]),
-    "schedule": (zcs.get_schedule, lambda a : [int(a[1])], zcs.parse_get_schedule),
-    "schedules": (zcs.get_schedule_info, lambda a : [], zcs.parse_get_schedule_info),
-    "write": (lambda a : a, lambda a : [bytearray.fromhex(a[1])])
+    "on": (smartplug.on, lambda a : []),
+    "brightness": (smartplug.on, lambda a : [int(a[1])]),
+    "off": (smartplug.off, lambda a : []),
+    "mode": (smartplug.set_mode, lambda a : [a[1] != "dimmable"]),
+    "power": (smartplug.read_power, lambda a : []),
+    "time": (smartplug.get_clock, lambda a : []),
+    "synctime": (smartplug.sync_clock, lambda a : []),
+    "schedule": (smartplug.get_schedule, lambda a : [int(a[1])]),
+    "schedules": (smartplug.get_schedule_info, lambda a : [])
 }
 
-async def do(args, device):
+async def do(args, devices):
     # Use the translation layer to "translate" command line input to a zcs
     # method call with appropriate arguments
     translation = TRANSLATION_LAYER[args[0]]
-    packet = translation[0](*translation[1](args))
+    command = translation[0]
+    command_args = translation[1](args)
+    
+    print("Firing commands")
+    async for response in command(devices, *command_args):
+        print(response)
+    print("All commands have finished")
 
-    # Write to and then read from the smartplug
-    await device.write_gatt_char(COMMAND_PIPE, data=packet, response=True)
-    raw = await device.read_gatt_char(COMMAND_PIPE)
+async def ainput(prompt: str) -> str:
+    await asyncio.to_thread(sys.stdout.write, f'{prompt} ')
+    return (await asyncio.to_thread(sys.stdin.readline)).rstrip('\n')
 
-    # Always print out the raw response
-    print(f"{device.address} : {raw.hex()}")
-
-    # Print error number (if any) and the zcs parsed response
-    status = zcs.parse_response(raw)
-    if status[1] != zcs.STATUS_SUCCESS:
-        print(f"\tDevice reported error {status[1]}")
-    elif len(translation) == 3:
-        print(f"\t{translation[2](raw)}")
+async def command_prompt(devices):
+    raw_command = await ainput("Enter command: ")
+    args = raw_command.split(" ", maxsplit=1)
+    if args[0] != "disconnect":
+        await do(args, devices)
+        return True
+    else:
+        return False
+    
+async def handle_discovered_devices(scanner, devices):
+    tasks = set()
+    async for (device, advertisement_data) in scanner.advertisement_data():
+            if device not in devices:
+                print(f"Discovered new device {device.address}")
+                devices.append(device)
+            if not device.is_connected:
+                print(f"{device.address} is disconnected, connecting")
+                connect_task = asyncio.create_task(device.connect())
+                tasks.add(connect_task)
+                connect_task.add_done_callback(tasks.discard)
 
 async def main():
-    async with BleakScanner() as scanner:
+    async with BleakScanner(service_uuids=[zcs.ZULI_SERVICE]) as scanner:
         print("Discovering devices")
-        await asyncio.sleep(DISCOVER_DURATION)
-
-    tracked_devices = []
-    for (device, advertising_data) in scanner.discovered_devices_and_advertisement_data.values():
-        if ZULI_SERVICE in advertising_data.service_uuids:
-            tracked_devices.append(BleakClient(device))
-    
-    print(f"Connecting {len(tracked_devices)} device(s)")
-    if len(tracked_devices) > 0:
+        # Keep handle for task so it isn't garbage collected
+        global discovery_handler
+        devices = []
+        discovery_handler = asyncio.create_task(handle_discovered_devices(
+            scanner, devices))
         try:
-            await asyncio.gather(*[client.connect() for client in tracked_devices])
-            print("Ready. Available commands are on|off|mode|power|time|synctime|schedule|schedules|write")
-            while True:
-                raw_command = input("Enter command: ")
-                args = raw_command.split(" ", maxsplit=1)
-                if args[0] == "disconnect":
-                    break
-                else:
-                    await asyncio.gather(*[do(args, client) for client in tracked_devices])
+            print("Ready. Devices will continue to connect")
+            while await command_prompt(devices):
+                # From the docs: "Setting the delay to 0 provides an optimized
+                # path to allow other tasks to run"
+                await asyncio.sleep(0)
         except Exception as e:
             print(e)
         finally:
             print(f"Closing all connections")
-            await asyncio.gather(*[client.disconnect() for client in tracked_devices])
+            await asyncio.gather(*[client.disconnect() for client in devices])
 
 asyncio.run(main())

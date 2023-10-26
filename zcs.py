@@ -2,7 +2,11 @@
 interpret Zuli protocol packets.
 """
 from typing import List
+from typing import Tuple
 import datetime
+
+ZULI_SERVICE = '04ee929b-bb13-4e77-8160-18552daf06e1'
+COMMAND_PIPE = 'ffffff03-bb13-4e77-8160-18552daf06e1'
 
 CMD_RESET = 2
 CMD_VERSION_READ = 6
@@ -37,11 +41,10 @@ STATUS_INVALID_PARAM = 6
 STATUS_BAD_LENGTH = 15
 STATUS_ALREADY_SET = 9
 
-def parse_response(response: bytearray) -> tuple:
-    """Returns a tuple containing the response command and the response status,
-    effectively returning the first and second bytes in the response as a
-    tuple"""
-    return (response[0], response[1])
+def parse_response_status(response: bytearray) -> tuple:
+    """Returns the response status, effectively returning the second byte in
+    the response"""
+    return response[1]
 
 def on(brightness = 0) -> bytearray:
     """Creates a packet to turn a smartplug on, optionally at a specified
@@ -68,7 +71,7 @@ def set_mode(is_appliance = True) -> bytearray:
     mode = 0 if is_appliance else 1
     return bytearray([CMD_MODE_SET, mode])
 
-def set_clock(time = datetime.datetime.today()) -> bytearray:
+def set_clock(time: datetime.datetime) -> bytearray:
     """Creates a packet to set the clock of a smartplug
 
     Smartplugs track their own system time for use with schedules, though this
@@ -188,7 +191,7 @@ def get_schedule_info() -> bytearray:
     """Creates a packet to get schedule info"""
     return bytearray([CMD_SCHEDULE_INFO_GET, 0])
 
-def parse_get_schedule_info(response: bytearray) -> tuple:
+def parse_get_schedule_info(response: bytearray) -> Tuple[int, int]:
     """Returns a tuple of the number of events and the maximum supported number
     and fails if the packet is malformed"""
     return (response[2], response[3])
