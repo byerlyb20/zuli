@@ -60,7 +60,7 @@ def add_schedule(clients, schedule:zcs.Schedule):
     return send_commands(clients, zcs.add_schedule(schedule))
 
 async def get_schedule(clients, i: int) -> AsyncGenerator[zcs.Schedule, None]:
-    async for response in await send_commands(clients, zcs.get_schedule(i)):
+    async for response in send_commands(clients, zcs.get_schedule(i)):
         yield zcs.parse_get_schedule(response)
 
 async def get_schedule_info(clients) -> AsyncGenerator[Tuple[int, int], None]:

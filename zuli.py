@@ -2,8 +2,8 @@ import asyncio
 import zcs
 import smartplug
 import sys
-from datetime import datetime
 from bleak import BleakScanner
+from bleak import BleakClient
 
 TRANSLATION_LAYER = {
     "on": (smartplug.on, lambda a : []),
@@ -24,54 +24,44 @@ async def do(args, devices):
     command = translation[0]
     command_args = translation[1](args)
     
-    print("Firing commands")
     async for response in command(devices, *command_args):
         print(response)
-    print("All commands have finished")
 
 async def ainput(prompt: str) -> str:
-    await asyncio.to_thread(sys.stdout.write, f'{prompt} ')
+    print(f"{prompt} ", end='', flush=True)
     return (await asyncio.to_thread(sys.stdin.readline)).rstrip('\n')
 
 async def command_prompt(devices):
-    raw_command = await ainput("Enter command: ")
+    global num
+    num += 1
+    raw_command = await ainput(f"Enter command: ")
     args = raw_command.split(" ", maxsplit=1)
     if args[0] != "disconnect":
         await do(args, devices)
         return True
     else:
         return False
-    
-async def handle_discovered_devices(scanner, devices):
-    tasks = set()
-    async for (device, advertisement_data) in scanner.advertisement_data():
-            if device not in devices:
-                print(f"Discovered new device {device.address}")
-                devices.append(device)
-            if not device.is_connected:
-                print(f"{device.address} is disconnected, connecting")
-                connect_task = asyncio.create_task(device.connect())
-                tasks.add(connect_task)
-                connect_task.add_done_callback(tasks.discard)
 
 async def main():
+    devices = {}
     async with BleakScanner(service_uuids=[zcs.ZULI_SERVICE]) as scanner:
-        print("Discovering devices")
-        # Keep handle for task so it isn't garbage collected
-        global discovery_handler
-        devices = []
-        discovery_handler = asyncio.create_task(handle_discovered_devices(
-            scanner, devices))
-        try:
-            print("Ready. Devices will continue to connect")
-            while await command_prompt(devices):
-                # From the docs: "Setting the delay to 0 provides an optimized
-                # path to allow other tasks to run"
-                await asyncio.sleep(0)
-        except Exception as e:
-            print(e)
-        finally:
-            print(f"Closing all connections")
-            await asyncio.gather(*[client.disconnect() for client in devices])
+        print("Waiting for first device to connect")
+        async for (device, advertisement_data) in scanner.advertisement_data():
+            client = BleakClient(device)
+            devices[device.address] = client
+            await client.connect()
+            break
+    try:
+        print("Ready.")
+        while await command_prompt(devices.values()):
+            # From the docs: "Setting the delay to 0 provides an optimized
+            # path to allow other tasks to run"
+            await asyncio.sleep(0)
+    except Exception as e:
+        print(e)
+    finally:
+        print(f"Closing all connections")
+        await asyncio.gather(*[client.disconnect()
+                                for client in devices.values()])
 
 asyncio.run(main())
