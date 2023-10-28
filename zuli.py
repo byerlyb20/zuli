@@ -2,8 +2,17 @@ import asyncio
 import zcs
 import smartplug
 import sys
+from datetime import time
 from bleak import BleakScanner
 from bleak import BleakClient
+
+def get_schedules(clients):
+    for client in clients:
+        return smartplug.get_client_schedules(client)
+    
+def remove_schedule(clients, i):
+    for client in clients:
+        return smartplug.remove_client_schedule(client, i)
 
 TRANSLATION_LAYER = {
     "on": (smartplug.on, lambda a : []),
@@ -13,8 +22,13 @@ TRANSLATION_LAYER = {
     "power": (smartplug.read_power, lambda a : []),
     "time": (smartplug.get_clock, lambda a : []),
     "synctime": (smartplug.sync_clock, lambda a : []),
-    "schedule": (smartplug.get_schedule, lambda a : [int(a[1])]),
-    "schedules": (smartplug.get_schedule_info, lambda a : [])
+    "schedules": (get_schedules, lambda a : []),
+    "remove_schedule": (remove_schedule, lambda a : [int(a[1])]),
+    "add_schedule": (smartplug.add_schedule,
+                     lambda a : [zcs.Schedule(time=time.fromisoformat(a[1]),
+                                              action=zcs.Schedule.ACTION_OFF
+                                              if a[2] == "off"
+                                              else zcs.Schedule.ACTION_ON)])
 }
 
 async def do(args, devices):
@@ -32,10 +46,8 @@ async def ainput(prompt: str) -> str:
     return (await asyncio.to_thread(sys.stdin.readline)).rstrip('\n')
 
 async def command_prompt(devices):
-    global num
-    num += 1
     raw_command = await ainput(f"Enter command: ")
-    args = raw_command.split(" ", maxsplit=1)
+    args = raw_command.split(" ")
     if args[0] != "disconnect":
         await do(args, devices)
         return True
@@ -45,12 +57,14 @@ async def command_prompt(devices):
 async def main():
     devices = {}
     async with BleakScanner(service_uuids=[zcs.ZULI_SERVICE]) as scanner:
-        print("Waiting for first device to connect")
+        print("Approach a device. Waiting to connect")
         async for (device, advertisement_data) in scanner.advertisement_data():
-            client = BleakClient(device)
-            devices[device.address] = client
-            await client.connect()
-            break
+            if advertisement_data.rssi > -70:
+                client = BleakClient(device)
+                devices[device.address] = client
+                await client.connect()
+                print(f"Connected to {device.address}")
+                break
     try:
         print("Ready.")
         while await command_prompt(devices.values()):

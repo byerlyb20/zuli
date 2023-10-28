@@ -110,7 +110,7 @@ class Schedule():
     ACTION_OFF = 2
     WEEKDAY_SYMBOL = "MTWTFSS"
 
-    def __init__(self, id: int, time: datetime.time, action=ACTION_ON,
+    def __init__(self, time: datetime.time, id=0, action=ACTION_ON,
                  weekdays=[True] * 7, enabled=True, schedule_id=0):
         self.id = id
         self.action = action
@@ -152,7 +152,7 @@ class Schedule():
         """Returns a trimmed byte representation of the schedule without
         identifiers, useful when removing schedules"""
         raw = self.to_bytes()
-        return raw[1:9]
+        return raw[1:8]
     
     def __str__(self):
         weekdays_sym = map(lambda i : self.WEEKDAY_SYMBOL[i]
@@ -195,3 +195,9 @@ def parse_get_schedule_info(response: bytearray) -> Tuple[int, int]:
     """Returns a tuple of the number of events and the maximum supported number
     and fails if the packet is malformed"""
     return (response[2], response[3])
+
+def remove_schedule(schedule: Schedule) -> bytearray:
+    """Creates a packet to remove a single schedule saved to the smartplug"""
+    packet = bytearray([CMD_SCHEDULE_REMOVE, 0])
+    packet.extend(schedule.as_anonymous())
+    return packet

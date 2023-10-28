@@ -56,13 +56,23 @@ async def read_power(clients) -> AsyncGenerator[int, None]:
     async for response in send_commands(clients, zcs.read_power()):
         yield zcs.parse_read_power(response)
 
-def add_schedule(clients, schedule:zcs.Schedule):
+def add_schedule(clients, schedule: zcs.Schedule):
     return send_commands(clients, zcs.add_schedule(schedule))
 
-async def get_schedule(clients, i: int) -> AsyncGenerator[zcs.Schedule, None]:
-    async for response in send_commands(clients, zcs.get_schedule(i)):
-        yield zcs.parse_get_schedule(response)
+async def get_schedule(client, i: int):
+    return zcs.parse_get_schedule(await send_command(client,
+                                                     zcs.get_schedule(i)))
 
-async def get_schedule_info(clients) -> AsyncGenerator[Tuple[int, int], None]:
-    async for response in send_commands(clients, zcs.get_schedule_info()):
-        yield zcs.parse_get_schedule_info(response)
+async def get_client_schedule_info(client):
+    return zcs.parse_get_schedule_info(await send_command(client,
+                                                   zcs.get_schedule_info()))
+
+async def get_client_schedules(client):
+    schedule_info = await get_client_schedule_info(client)
+    num_schedules = schedule_info[0]
+    for i in range(1, num_schedules + 1):
+        yield await get_schedule(client, i)
+
+async def remove_client_schedule(client, i: int):
+    schedule = await get_schedule(client, i)
+    yield await send_command(client, zcs.remove_schedule(schedule))
