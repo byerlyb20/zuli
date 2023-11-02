@@ -75,3 +75,16 @@ async def get_client_schedules(client: BleakClient):
 async def remove_client_schedule(client: BleakClient, i: int):
     schedule = await get_schedule(client, i)
     yield await send_command(client, zcs.remove_schedule(schedule))
+
+async def poll_all_commands(client: BleakClient):
+    for code in range(256):
+        yield (code, await send_command(client, bytearray([code])))
+
+async def poll_command(client: BleakClient, command: int):
+    packet = bytearray([command])
+    for i in range(15):
+        packet.append(0)
+        response = await send_command(client, packet)
+        if len(response) < 2 or response[1] != 15:
+            yield (i + 1, response.hex())
+            break

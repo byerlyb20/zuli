@@ -28,7 +28,8 @@ TRANSLATION_LAYER = {
                      lambda a : [zcs.Schedule(time=time.fromisoformat(a[1]),
                                               action=zcs.Schedule.ACTION_OFF
                                               if a[2] == "off"
-                                              else zcs.Schedule.ACTION_ON)])
+                                              else zcs.Schedule.ACTION_ON)]),
+    "write": (smartplug.send_commands, lambda a : [bytearray.fromhex(a[1])])
 }
 
 async def do(args, devices):
@@ -39,7 +40,10 @@ async def do(args, devices):
     command_args = translation[1](args)
     
     async for response in command(devices, *command_args):
-        print(response)
+        if isinstance(response, bytearray):
+            print(response.hex())
+        else:
+            print(response)
 
 async def ainput(prompt: str) -> str:
     print(f"{prompt} ", end='', flush=True)

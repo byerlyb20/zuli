@@ -1,8 +1,6 @@
 """Zuli Command Suite (or for short, zcs) provides a handy way to generate and
 interpret Zuli protocol packets.
 """
-from typing import List
-from typing import Tuple
 import datetime
 
 ZULI_SERVICE = '04ee929b-bb13-4e77-8160-18552daf06e1'
@@ -26,12 +24,15 @@ CMD_POWER_READ = 32
 CMD_ENERGY_READ_INFO = 33
 CMD_ENERGY_READ_ACCUM = 34
 CMD_ENERGY_READ_LATCH = 35
+CMD_ENERGY_LATCH_RESET_ALL = 36
 CMD_SCHEDULE_INFO_GET = 48
 CMD_SCHEDULE_GET = 49
 CMD_SCHEDULE_ENABLE = 50
 CMD_SCHEDULE_ADD = 51
 CMD_SCHEDULE_REMOVE = 52
 CMD_SCHEDULE_REMOVE_ALL = 53
+CMD_DEFAULT_OUTPUT_SET = 80
+CMD_DEFAULT_OUTPUT_GET = 81
 CMD_BOOKMARK = 126
 CMD_BATCH = 127
 
@@ -98,10 +99,14 @@ def read_power() -> bytearray:
     """Creates a packet to read current power consumption"""
     return bytearray([CMD_POWER_READ])
 
-def parse_read_power(response: bytearray) -> int:
+def parse_read_power(response: bytearray) -> tuple[int, int, int, int]:
     """Returns the current power consumption in watts from a read power packet
     and fails if the packet is malformed"""
-    return int.from_bytes(response[2:]) / 1e20
+    irms_ma = int.from_bytes(response[2:4])
+    power_mw = int.from_bytes(response[4:7])
+    power_factor = int.from_bytes(response[7:9])
+    voltage_mv = int.from_bytes(response[9:12])
+    return (irms_ma, power_mw, power_factor, voltage_mv)
 
 class Schedule():
     """A representation of a schedule that can be used to turn a smartplug on
@@ -134,7 +139,7 @@ class Schedule():
             weekdays.append(raw[7] & bitflag == bitflag)
         enabled = raw[8] == 1
         schedule_id = raw[9]
-        return Schedule(id, time, action=action, weekdays=weekdays,
+        return Schedule(time, id=id, action=action, weekdays=weekdays,
                         enabled=enabled, schedule_id=schedule_id)
 
     def to_bytes(self) -> bytearray:
@@ -191,7 +196,7 @@ def get_schedule_info() -> bytearray:
     """Creates a packet to get schedule info"""
     return bytearray([CMD_SCHEDULE_INFO_GET, 0])
 
-def parse_get_schedule_info(response: bytearray) -> Tuple[int, int]:
+def parse_get_schedule_info(response: bytearray) -> tuple[int, int]:
     """Returns a tuple of the number of events and the maximum supported number
     and fails if the packet is malformed"""
     return (response[2], response[3])
@@ -200,4 +205,51 @@ def remove_schedule(schedule: Schedule) -> bytearray:
     """Creates a packet to remove a single schedule saved to the smartplug"""
     packet = bytearray([CMD_SCHEDULE_REMOVE, 0])
     packet.extend(schedule.as_anonymous())
+    return packet
+
+def remove_all_schedules() -> bytearray:
+    """Untested. Reconstructed from Zuli Android app"""
+    packet = bytearray([CMD_SCHEDULE_REMOVE_ALL])
+    confirm_remove_all = 46140
+    packet.extend(confirm_remove_all.to_bytes(2))
+    return packet
+
+def read_energy_info() -> bytearray:
+    """Untested. Reconstructed from Zuli Android app"""
+    return bytearray([CMD_ENERGY_READ_INFO, 0])
+
+def parse_read_energy_info(response: bytearray) -> tuple[int, int, int, int]:
+    a = response[2]
+    b = response[4]
+    c = int.from_bytes(response[5:7])
+    d = int.from_bytes(response[7:9])
+    return (a, b, c, d)
+
+def read_latch_data(latch_id: int) -> bytearray:
+    """Untested. Reconstructed from Zuli Android app"""
+    packet = bytearray([CMD_ENERGY_READ_LATCH, 0])
+    packet.extend(latch_id.to_bytes(2))
+    return packet
+
+def parse_read_latch_data(response: bytearray) -> tuple[int, int, int, int]:
+    """Untested. Reconstructed from Zuli Android app"""
+    value = int.from_bytes(response[2:9])
+    duration = int.from_bytes(response[9:14])
+    unix_time_sec = int.from_bytes(response[14:18])
+    unix_time_ms = int.from_bytes(response[18:20])
+    return (value, duration, unix_time_sec, unix_time_ms)
+
+def reset_all_latches(num_latches: int) -> bytearray:
+    """Untested. Reconstructed from Zuli Android app"""
+    packet = bytearray([CMD_ENERGY_LATCH_RESET_ALL, 0])
+    packet.extend(num_latches.to_bytes(2))
+    confirm_reset_all = 5693
+    packet.extend(confirm_reset_all.to_bytes(2))
+    return packet
+
+def reset_plug() -> bytearray:
+    """Untested. Reconstructed from Zuli Android app"""
+    packet = bytearray([CMD_RESET, CMD_RESET, 0])
+    confirm_reset = 22890
+    packet.extend(confirm_reset.to_bytes(2))
     return packet
