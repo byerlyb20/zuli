@@ -13,6 +13,10 @@ def get_schedules(clients):
 def remove_schedule(clients, i):
     for client in clients:
         return smartplug.remove_client_schedule(client, i)
+    
+async def get_devices(clients):
+    for client in clients:
+        yield client.address
 
 TRANSLATION_LAYER = {
     "on": (smartplug.on, lambda a : []),
@@ -29,7 +33,8 @@ TRANSLATION_LAYER = {
                                               action=zcs.Schedule.ACTION_OFF
                                               if a[2] == "off"
                                               else zcs.Schedule.ACTION_ON)]),
-    "write": (smartplug.send_commands, lambda a : [bytearray.fromhex(a[1])])
+    "write": (smartplug.send_commands, lambda a : [bytearray.fromhex(a[1])]),
+    "devices": (get_devices, lambda a : [])
 }
 
 async def do(args, devices):
@@ -50,7 +55,7 @@ async def ainput(prompt: str) -> str:
     return (await asyncio.to_thread(sys.stdin.readline)).rstrip('\n')
 
 async def command_prompt(devices):
-    raw_command = await ainput(f"Enter command: ")
+    raw_command = await ainput(f">>> ")
     args = raw_command.split(" ")
     if args[0] != "disconnect":
         await do(args, devices)
@@ -60,17 +65,16 @@ async def command_prompt(devices):
 
 async def main():
     devices = {}
-    async with BleakScanner(service_uuids=[zcs.ZULI_SERVICE]) as scanner:
-        print("Approach a device. Waiting to connect")
-        async for (device, advertisement_data) in scanner.advertisement_data():
-            if advertisement_data.rssi > -70:
-                client = BleakClient(device)
-                devices[device.address] = client
-                await client.connect()
-                print(f"Connected to {device.address}")
-                break
+    async def discover():
+        async with BleakScanner(service_uuids=[zcs.ZULI_SERVICE]) as scanner:
+            async for (device, advertisement_data) in scanner.advertisement_data():
+                if device.address not in devices:
+                    client = BleakClient(device)
+                    await client.connect()
+                    devices[device.address] = client
+    asyncio.create_task(discover())
     try:
-        print("Ready.")
+        print("Ready. Devices will continue to connect in the background")
         while await command_prompt(devices.values()):
             # From the docs: "Setting the delay to 0 provides an optimized
             # path to allow other tasks to run"
