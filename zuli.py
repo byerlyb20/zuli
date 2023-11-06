@@ -8,9 +8,18 @@ from bleak import BleakScanner
 from bleak import BleakClient
 
 def filter_devices(devices: dict[str, BleakClient], addresses: list[str]):
-    filtered = [devices[addr] for addr in addresses]
-    if len(filtered) == 0:
-        filtered.extend(devices.values())
+    # An empty list of addresses returns all devices
+    if len(addresses) == 0:
+        return devices.values()
+    
+    # Find devices in dict with (possible) partial addresses
+    # Performance is not great, but the number of devices should always be very
+    # low
+    filtered = []
+    for addr in addresses:
+        for k, v in devices.items():
+            if k.startswith(addr):
+                filtered.append(v)
     return filtered
     
 def wrap_method(smartplug_func):
@@ -42,7 +51,7 @@ def configure_parser():
     subparsers = parser.add_subparsers()
 
     parent_parser = argparse.ArgumentParser(add_help=False)
-    parent_parser.add_argument('-d', '--devices', action='append', nargs='?',
+    parent_parser.add_argument('-d', '--devices', action='extend', nargs='*',
                                type=str, default=[])
 
     parser_on = subparsers.add_parser('on', parents=[parent_parser])
