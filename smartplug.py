@@ -58,23 +58,23 @@ async def read_power(clients: list[BleakClient]):
 def add_schedule(clients: list[BleakClient], schedule: zcs.Schedule):
     return send_commands(clients, zcs.add_schedule(schedule))
 
-async def get_schedule(client: BleakClient, i: int):
-    return zcs.parse_get_schedule(await send_command(client,
+async def get_schedule(clients: list[BleakClient], i: int):
+    return zcs.parse_get_schedule(await send_command(clients[0],
                                                      zcs.get_schedule(i)))
 
-async def get_client_schedule_info(client: BleakClient):
-    return zcs.parse_get_schedule_info(await send_command(client,
+async def get_client_schedule_info(clients: list[BleakClient]):
+    return zcs.parse_get_schedule_info(await send_command(clients[0],
                                                    zcs.get_schedule_info()))
 
-async def get_client_schedules(client: BleakClient):
-    schedule_info = await get_client_schedule_info(client)
+async def get_client_schedules(clients: list[BleakClient]):
+    schedule_info = await get_client_schedule_info(clients[0])
     num_schedules = schedule_info[0]
     for i in range(1, num_schedules + 1):
-        yield await get_schedule(client, i)
+        yield await get_schedule(clients[0], i)
 
-async def remove_client_schedule(client: BleakClient, i: int):
-    schedule = await get_schedule(client, i)
-    yield await send_command(client, zcs.remove_schedule(schedule))
+async def remove_client_schedule(clients: list[BleakClient], i: int):
+    schedule = await get_schedule(clients[0], i)
+    yield await send_command(clients[0], zcs.remove_schedule(schedule))
 
 async def poll_all_commands(client: BleakClient):
     for code in range(256):
