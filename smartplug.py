@@ -67,13 +67,13 @@ async def get_client_schedule_info(clients: list[BleakClient]):
                                                    zcs.get_schedule_info()))
 
 async def get_client_schedules(clients: list[BleakClient]):
-    schedule_info = await get_client_schedule_info(clients[0])
+    schedule_info = await get_client_schedule_info(clients)
     num_schedules = schedule_info[0]
     for i in range(1, num_schedules + 1):
-        yield await get_schedule(clients[0], i)
+        yield await get_schedule(clients, i)
 
 async def remove_client_schedule(clients: list[BleakClient], i: int):
-    schedule = await get_schedule(clients[0], i)
+    schedule = await get_schedule(clients, i)
     yield await send_command(clients[0], zcs.remove_schedule(schedule))
 
 async def poll_all_commands(client: BleakClient):
