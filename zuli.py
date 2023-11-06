@@ -3,6 +3,7 @@ import zcs
 import smartplug
 import sys
 import argparse
+import argparsei
 from datetime import time
 from bleak import BleakScanner
 from bleak import BleakClient
@@ -47,10 +48,10 @@ async def ainput(prompt: str) -> str:
     return (await asyncio.to_thread(sys.stdin.readline)).rstrip('\n')
     
 def configure_parser():
-    parser = argparse.ArgumentParser(prog="zuli", exit_on_error=False)
+    parser = argparsei.InteractiveArgumentParser(prog="zuli", exit_on_error=False)
     subparsers = parser.add_subparsers()
 
-    parent_parser = argparse.ArgumentParser(add_help=False)
+    parent_parser = argparsei.InteractiveArgumentParser(add_help=False)
     parent_parser.add_argument('-d', '--devices', action='extend', nargs='*',
                                type=str, default=[])
 
@@ -126,10 +127,10 @@ async def main():
 
             try:
                 args = parser.parse_args(command.split())
+                if hasattr(args, 'func'):
+                    await args.func(args, devices)
             except Exception as e:
                 print(e)
-                continue
-            await args.func(args, devices)
     except Exception as e:
         print(e)
     finally:
