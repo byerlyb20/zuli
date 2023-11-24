@@ -11,7 +11,7 @@ from bleak import BleakClient
 def filter_devices(devices: dict[str, BleakClient], addresses: list[str]):
     # An empty list of addresses returns all devices
     if len(addresses) == 0:
-        return devices.values()
+        return list(devices.values())
     
     # Find devices in dict with (possible) partial addresses
     # Performance is not great, but the number of devices should always be very
