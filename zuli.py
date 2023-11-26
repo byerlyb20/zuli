@@ -96,7 +96,7 @@ def configure_parser():
         return [zcs.Schedule(time=a.time, action=zcs.Schedule.ACTION_OFF
                                             if a.action == "off"
                                             else zcs.Schedule.ACTION_ON)]
-    parser_schedule_add.set_defaults(func=smartplug.add_schedule,
+    parser_schedule_add.set_defaults(func=wrap_method(smartplug.add_schedule),
                                         params=schedule_params)
     
     parser_devices = subparsers.add_parser('devices')
