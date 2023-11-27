@@ -110,12 +110,15 @@ async def main():
     devices = {}
     async def discover():
         async with BleakScanner(service_uuids=[zcs.ZULI_SERVICE]) as scanner:
+            connect_tasks = set()
             async for (device, advertisement_data) in scanner.advertisement_data():
                 if device.address not in devices:
                     client = BleakClient(device)
-                    await client.connect()
                     devices[device.address] = client
-    asyncio.create_task(discover())
+                    task = asyncio.create_task(client.connect())
+                    connect_tasks.add(task)
+                    task.add_done_callback(connect_tasks.discard)
+    discovery_task = asyncio.create_task(discover())
     try:
         print("Ready. Devices will continue to connect in the background")
         parser = configure_parser()

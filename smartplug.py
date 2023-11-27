@@ -25,10 +25,13 @@ async def send_commands(clients: list[BleakClient],
     for client in clients:
         task = asyncio.create_task(send_command(client, packet))
         tasks.add(task)
-        task.add_done_callback(
-            lambda task : response_queue.put_nowait(task.result())
-        )
-        task.add_done_callback(tasks.discard)
+        def done_callback(task):
+            try:
+                response_queue.put_nowait(task.result())
+            except Exception:
+                # Ignore exceptions
+                response_queue.put_nowait(bytearray())
+        task.add_done_callback(done_callback)
     for i in range(len(clients)):
         yield await response_queue.get()
 
