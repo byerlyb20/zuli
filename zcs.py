@@ -50,7 +50,7 @@ def parse_response_status(response: bytearray) -> tuple:
 def on(brightness = 0) -> bytearray:
     """Creates a packet to turn a smartplug on, optionally at a specified
     brightness
-    
+
     :param brightness: a number between 0 and 100 (otherwise will be trimmed);
         note that this defaults to 0, which is functionally equivalent to 100;
         brightness is ignored by the smartplug when in appliance mode"""
@@ -63,7 +63,7 @@ def off() -> bytearray:
 
 def set_mode(is_appliance = True) -> bytearray:
     """Creates a packet to set the mode of a smartplug
-    
+
     :param is_appliance: by default True, indicating that the smartplug is
         attached to a high power device that does not support dimming (good for
         appliances, non-dimmable lights, etc.); otherwise, the smartplug allows
@@ -102,11 +102,11 @@ def read_power() -> bytearray:
 def parse_read_power(response: bytearray) -> tuple[int, int, int, int]:
     """Returns the current power consumption in watts from a read power packet
     and fails if the packet is malformed"""
-    irms_ma = int.from_bytes(response[2:4])
-    power_mw = int.from_bytes(response[4:7])
-    power_factor = int.from_bytes(response[7:9])
-    voltage_mv = int.from_bytes(response[9:12])
-    return (irms_ma, power_mw, power_factor, voltage_mv)
+    irms_ma = int.from_bytes(response[2:4], 'big')
+    power_mw = int.from_bytes(response[4:7], 'big')
+    power_factor = int.from_bytes(response[7:9], 'big')
+    voltage_mv = int.from_bytes(response[9:12], 'big')
+    return (f'{irms_ma / 1000} amps', f'{power_mw / 1000} watts', power_factor, f'{voltage_mv / 1000} volts')
 
 class Schedule():
     """A representation of a schedule that can be used to turn a smartplug on
@@ -152,13 +152,13 @@ class Schedule():
         return bytearray([self.id, self.action, 0, 0, self.time.hour,
                       self.time.minute, self.time.second, weekdays,
                       self.enabled, self.schedule_id])
-    
+
     def as_anonymous(self) -> bytearray:
         """Returns a trimmed byte representation of the schedule without
         identifiers, useful when removing schedules"""
         raw = self.to_bytes()
         return raw[1:8]
-    
+
     def __str__(self):
         weekdays_sym = map(lambda i : self.WEEKDAY_SYMBOL[i]
                            if self.weekdays[i] else "-", range(7))
@@ -180,7 +180,7 @@ def get_schedule(i: int) -> bytearray:
     This packet will typically be sent n times, n being the number of schedules
     saved to the smartplug, after first sending a get schedule info packet to
     determine the value of n.
-    
+
     :param i: a number between 1 and the number of schedules on the smartplug;
         the number that corresponds to a specific schedule does not stay the
         same between operations that change schedules
