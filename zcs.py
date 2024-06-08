@@ -3,7 +3,7 @@ interpret Zuli protocol packets.
 """
 import datetime
 
-ZULI_SERVICE = '04ee929b-bb13-4e77-8160-18552daf06e1'
+ZULI_LOCAL_NAME = 'Zuli Smartplug'
 COMMAND_PIPE = 'ffffff03-bb13-4e77-8160-18552daf06e1'
 
 CMD_RESET = 2
@@ -50,7 +50,7 @@ def parse_response_status(response: bytearray) -> tuple:
 def on(brightness = 0) -> bytearray:
     """Creates a packet to turn a smartplug on, optionally at a specified
     brightness
-    
+
     :param brightness: a number between 0 and 100 (otherwise will be trimmed);
         note that this defaults to 0, which is functionally equivalent to 100;
         brightness is ignored by the smartplug when in appliance mode"""
@@ -63,7 +63,7 @@ def off() -> bytearray:
 
 def set_mode(is_appliance = True) -> bytearray:
     """Creates a packet to set the mode of a smartplug
-    
+
     :param is_appliance: by default True, indicating that the smartplug is
         attached to a high power device that does not support dimming (good for
         appliances, non-dimmable lights, etc.); otherwise, the smartplug allows
@@ -78,7 +78,7 @@ def set_clock(time: datetime.datetime) -> bytearray:
     Smartplugs track their own system time for use with schedules, though this
     time does not persist past power cycles.
     """
-    year = time.year.to_bytes(2)
+    year = time.year.to_bytes(2, 'big')
     weekday = ((time.weekday() + 1) % 7) + 1
     return bytearray([CMD_CLOCK_SET, year[0], year[1], time.month, time.day,
                       weekday, time.hour, time.minute, time.second])
@@ -90,7 +90,7 @@ def get_clock() -> bytearray:
 def parse_get_clock(response: bytearray) -> datetime.datetime:
     """Produces a datetime object from a get clock packet and fails if the
     packet is malformed"""
-    year = int.from_bytes(response[2:4])
+    year = int.from_bytes(response[2:4], 'big')
     return datetime.datetime(year, month=response[4], day=response[5],
                              hour=response[7], minute=response[8],
                              second=response[9])
@@ -102,10 +102,10 @@ def read_power() -> bytearray:
 def parse_read_power(response: bytearray) -> tuple[int, int, int, int]:
     """Returns the current power consumption in watts from a read power packet
     and fails if the packet is malformed"""
-    irms_ma = int.from_bytes(response[2:4])
-    power_mw = int.from_bytes(response[4:7])
-    power_factor = int.from_bytes(response[7:9])
-    voltage_mv = int.from_bytes(response[9:12])
+    irms_ma = int.from_bytes(response[2:4], 'big')
+    power_mw = int.from_bytes(response[4:7], 'big')
+    power_factor = int.from_bytes(response[7:9], 'big')
+    voltage_mv = int.from_bytes(response[9:12], 'big')
     return (irms_ma, power_mw, power_factor, voltage_mv)
 
 class Schedule():
@@ -152,13 +152,13 @@ class Schedule():
         return bytearray([self.id, self.action, 0, 0, self.time.hour,
                       self.time.minute, self.time.second, weekdays,
                       self.enabled, self.schedule_id])
-    
+
     def as_anonymous(self) -> bytearray:
         """Returns a trimmed byte representation of the schedule without
         identifiers, useful when removing schedules"""
         raw = self.to_bytes()
         return raw[1:8]
-    
+
     def __str__(self):
         weekdays_sym = map(lambda i : self.WEEKDAY_SYMBOL[i]
                            if self.weekdays[i] else "-", range(7))
@@ -180,7 +180,7 @@ def get_schedule(i: int) -> bytearray:
     This packet will typically be sent n times, n being the number of schedules
     saved to the smartplug, after first sending a get schedule info packet to
     determine the value of n.
-    
+
     :param i: a number between 1 and the number of schedules on the smartplug;
         the number that corresponds to a specific schedule does not stay the
         same between operations that change schedules
@@ -211,7 +211,7 @@ def remove_all_schedules() -> bytearray:
     """Untested. Reconstructed from Zuli Android app"""
     packet = bytearray([CMD_SCHEDULE_REMOVE_ALL])
     confirm_remove_all = 46140
-    packet.extend(confirm_remove_all.to_bytes(2))
+    packet.extend(confirm_remove_all.to_bytes(2), 'big')
     return packet
 
 def read_energy_info() -> bytearray:
@@ -221,35 +221,35 @@ def read_energy_info() -> bytearray:
 def parse_read_energy_info(response: bytearray) -> tuple[int, int, int, int]:
     a = response[2]
     b = response[4]
-    c = int.from_bytes(response[5:7])
-    d = int.from_bytes(response[7:9])
+    c = int.from_bytes(response[5:7], 'big')
+    d = int.from_bytes(response[7:9], 'big')
     return (a, b, c, d)
 
 def read_latch_data(latch_id: int) -> bytearray:
     """Untested. Reconstructed from Zuli Android app"""
     packet = bytearray([CMD_ENERGY_READ_LATCH, 0])
-    packet.extend(latch_id.to_bytes(2))
+    packet.extend(latch_id.to_bytes(2, 'big'))
     return packet
 
 def parse_read_latch_data(response: bytearray) -> tuple[int, int, int, int]:
     """Untested. Reconstructed from Zuli Android app"""
-    value = int.from_bytes(response[2:9])
-    duration = int.from_bytes(response[9:14])
-    unix_time_sec = int.from_bytes(response[14:18])
-    unix_time_ms = int.from_bytes(response[18:20])
+    value = int.from_bytes(response[2:9], 'big')
+    duration = int.from_bytes(response[9:14], 'big')
+    unix_time_sec = int.from_bytes(response[14:18], 'big')
+    unix_time_ms = int.from_bytes(response[18:20], 'big')
     return (value, duration, unix_time_sec, unix_time_ms)
 
 def reset_all_latches(num_latches: int) -> bytearray:
     """Untested. Reconstructed from Zuli Android app"""
     packet = bytearray([CMD_ENERGY_LATCH_RESET_ALL, 0])
-    packet.extend(num_latches.to_bytes(2))
+    packet.extend(num_latches.to_bytes(2, 'big'))
     confirm_reset_all = 5693
-    packet.extend(confirm_reset_all.to_bytes(2))
+    packet.extend(confirm_reset_all.to_bytes(2, 'big'))
     return packet
 
 def reset_plug() -> bytearray:
     """Untested. Reconstructed from Zuli Android app"""
     packet = bytearray([CMD_RESET, CMD_RESET, 0])
     confirm_reset = 22890
-    packet.extend(confirm_reset.to_bytes(2))
+    packet.extend(confirm_reset.to_bytes(2, 'big'))
     return packet
