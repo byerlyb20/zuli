@@ -12,7 +12,7 @@ def filter_devices(devices: dict[str, BleakClient], addresses: list[str]):
     # An empty list of addresses returns all devices
     if len(addresses) == 0:
         return list(devices.values())
-    
+
     # Find devices in dict with (possible) partial addresses
     # Performance is not great, but the number of devices should always be very
     # low
@@ -22,7 +22,7 @@ def filter_devices(devices: dict[str, BleakClient], addresses: list[str]):
             if k.startswith(addr):
                 filtered.append(v)
     return filtered
-    
+
 def wrap_method(smartplug_func):
     """Because methods in the smartplug module do not understand command line
     arguments from argparse.Namespace objects, this method creates and returns
@@ -37,7 +37,7 @@ def wrap_method(smartplug_func):
             else:
                 print(result)
     return do
-    
+
 async def list_devices(args: argparse.Namespace,
                        devices: dict[str, BleakClient]):
     for client in devices.values():
@@ -46,7 +46,7 @@ async def list_devices(args: argparse.Namespace,
 async def ainput(prompt: str) -> str:
     print(f"{prompt} ", end='', flush=True)
     return (await asyncio.to_thread(sys.stdin.readline)).rstrip('\n')
-    
+
 def configure_parser():
     parser = argparsei.InteractiveArgumentParser(prog="zuli", exit_on_error=False)
     subparsers = parser.add_subparsers()
@@ -67,7 +67,7 @@ def configure_parser():
     parser_mode.add_argument('mode', choices=['dimmable', 'appliance'])
     parser_mode.set_defaults(func=wrap_method(smartplug.set_mode),
                                 params=lambda a : [a.mode == 'appliance'])
-    
+
     parser_power = subparsers.add_parser('power', parents=[parent_parser])
     parser_power.set_defaults(func=wrap_method(smartplug.read_power))
 
@@ -87,18 +87,27 @@ def configure_parser():
     parser_schedule_remove.add_argument('schedule', type=int)
     parser_schedule_remove.set_defaults(func=wrap_method(smartplug.remove_client_schedule),
                                         params=lambda a : [a.schedule])
-    
+
     parser_schedule_add = subparsers.add_parser('add_schedule',
                                                 parents=[parent_parser])
-    parser_schedule_add.add_argument('time', type=time.fromisoformat)
+    parser_schedule_add.add_argument(
+        'weekdays',
+        type=str,
+        help="A string of 7 1s and 0s, where 1 is enabled and 0 is disabled",
+        default="1111111"
+    )
+    parser_schedule_add.add_argument('time', type=time.fromisoformat, help="The time to run the schedule, in HH:MM:SS format")
     parser_schedule_add.add_argument('action', choices=['on', 'off'])
     def schedule_params(a):
-        return [zcs.Schedule(time=a.time, action=zcs.Schedule.ACTION_OFF
+        weekdays = list(a.weekdays)
+        weekdays = [s == '1' for s in weekdays]
+
+        return [zcs.Schedule(time=a.time, weekdays=weekdays, action=zcs.Schedule.ACTION_OFF
                                             if a.action == "off"
                                             else zcs.Schedule.ACTION_ON)]
     parser_schedule_add.set_defaults(func=wrap_method(smartplug.add_schedule),
                                         params=schedule_params)
-    
+
     parser_devices = subparsers.add_parser('devices')
     parser_devices.set_defaults(func=list_devices)
 
@@ -109,16 +118,17 @@ def configure_parser():
 async def main():
     devices = {}
     async def discover():
-        async with BleakScanner(service_uuids=[zcs.ZULI_SERVICE]) as scanner:
+        async with BleakScanner() as scanner:
             connect_tasks = set()
             async for (device, advertisement_data) in scanner.advertisement_data():
-                if device.address not in devices:
-                    client = BleakClient(device)
-                    devices[device.address] = client
-                    task = asyncio.create_task(client.connect())
-                    connect_tasks.add(task)
-                    task.add_done_callback(connect_tasks.discard)
-    discovery_task = asyncio.create_task(discover())
+                if advertisement_data.local_name == zcs.ZULI_LOCAL_NAME:
+                    if device.address not in devices:
+                        client = BleakClient(device)
+                        devices[device.address] = client
+                        task = asyncio.create_task(client.connect())
+                        connect_tasks.add(task)
+                        task.add_done_callback(connect_tasks.discard)
+    asyncio.create_task(discover())
     try:
         print("Ready. Devices will continue to connect in the background")
         parser = configure_parser()
