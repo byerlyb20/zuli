@@ -90,10 +90,19 @@ def configure_parser():
 
     parser_schedule_add = subparsers.add_parser('add_schedule',
                                                 parents=[parent_parser])
-    parser_schedule_add.add_argument('time', type=time.fromisoformat)
+    parser_schedule_add.add_argument(
+        'weekdays',
+        type=str,
+        help="A string of 7 1s and 0s, where 1 is enabled and 0 is disabled",
+        default="1111111"
+    )
+    parser_schedule_add.add_argument('time', type=time.fromisoformat, help="The time to run the schedule, in HH:MM:SS format")
     parser_schedule_add.add_argument('action', choices=['on', 'off'])
     def schedule_params(a):
-        return [zcs.Schedule(time=a.time, action=zcs.Schedule.ACTION_OFF
+        weekdays = list(a.weekdays)
+        weekdays = [s == '1' for s in weekdays]
+
+        return [zcs.Schedule(time=a.time, weekdays=weekdays, action=zcs.Schedule.ACTION_OFF
                                             if a.action == "off"
                                             else zcs.Schedule.ACTION_ON)]
     parser_schedule_add.set_defaults(func=wrap_method(smartplug.add_schedule),
