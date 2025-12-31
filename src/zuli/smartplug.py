@@ -66,6 +66,18 @@ class ZuliSmartplug():
 
     async def off(self):
         return await self._send_command(protocol.encode_off())
+    
+    async def read(self):
+        return await self._send_command(
+            protocol.encode_read(),
+            protocol.decode_read
+        )
+    
+    async def get_mode(self):
+        return await self._send_command(
+            protocol.encode_get_mode(),
+            protocol.decode_get_mode
+        )
 
     async def set_mode(self, is_appliance: bool):
         return await self._send_command(protocol.encode_set_mode(is_appliance))

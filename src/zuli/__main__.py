@@ -49,9 +49,7 @@ def wrap_method(smartplug_func: Callable[[ZuliSmartplug], Callable[..., Awaitabl
             device = result[0] if isinstance(result, tuple) else None
             result = result[1] if isinstance(result, tuple) else result
 
-            if isinstance(result, bool):
-                result = "Success" if result else "Failure"
-            elif isinstance(result, list):
+            if isinstance(result, list):
                 results = result
                 result = ""
                 for item in results:
@@ -93,7 +91,13 @@ def configure_parser():
     parser_off = subparsers.add_parser('off', parents=[parent_parser])
     parser_off.set_defaults(func=wrap_method(lambda a: a.off))
 
-    parser_mode = subparsers.add_parser('mode', parents=[parent_parser])
+    parser_off = subparsers.add_parser('read', parents=[parent_parser])
+    parser_off.set_defaults(func=wrap_method(lambda a: a.read))
+
+    parser_off = subparsers.add_parser('mode', parents=[parent_parser])
+    parser_off.set_defaults(func=wrap_method(lambda a: a.get_mode))
+
+    parser_mode = subparsers.add_parser('set_mode', parents=[parent_parser])
     parser_mode.add_argument('mode', choices=['dimmable', 'appliance'])
     parser_mode.set_defaults(func=wrap_method(lambda a: a.set_mode),
                                 params=lambda a : [a.mode == 'appliance'])

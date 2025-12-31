@@ -51,6 +51,15 @@ def decode_response_status(response: bytearray) -> ZuliStatus:
     """Returns response status"""
     return ZuliStatus(response[1])
 
+def encode_read() -> bytearray:
+    """Message to query the state of a smartplug (on/off/brightness)"""
+    return bytearray([ZuliCommand.READ.value])
+
+def decode_read(response: bytearray) -> int:
+    """Returns the current brightness of the device as an integer from 0-100 
+    (for appliances, this value will be either 0 for off or 100 for on)"""
+    return int(response[2])
+
 def encode_on(brightness: int = 0) -> bytearray:
     """Message to turn a smartplug on, optionally at a specified brightness
     
@@ -63,6 +72,15 @@ def encode_on(brightness: int = 0) -> bytearray:
 def encode_off() -> bytearray:
     """Message to turn a smartplug off"""
     return bytearray([ZuliCommand.OFF.value, 0, 0, 0])
+
+def encode_get_mode() -> bytearray:
+    """Message to query the mode of a smartplug (appliance or dimmable)"""
+    return bytearray([ZuliCommand.MODE_GET.value])
+
+def decode_get_mode(response: bytearray) -> bool:
+    """Returns whether the device is in appliance mode (True=appliance,
+    False=dimmable)"""
+    return not bool(response[2])
 
 def encode_set_mode(is_appliance: bool = True) -> bytearray:
     """Message to set the mode of a smartplug

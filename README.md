@@ -48,7 +48,7 @@ Or, you could turn on a specific device.
 To see a complete list of commands, type garbage into the prompt:
 
 ```
-argument {on,off,mode,power,time,synctime,schedules,remove_schedule,add_schedule,devices,quit}: invalid choice: 'qwertyasdf' (choose from on, off, mode, power, time, synctime, schedules, remove_schedule, add_schedule, devices, quit)
+argument {on,off,read,mode,set_mode,power,time,synctime,schedules,remove_schedule,add_schedule,devices,quit}: invalid choice: 'qwertyasdf' (choose from 'on', 'off', 'read', 'mode', 'set_mode', 'power', 'time', 'synctime', 'schedules', 'remove_schedule', 'add_schedule', 'devices', 'quit')
 ```
 
 ## Next steps
