@@ -7,9 +7,19 @@ I do find myself using it from time to time. (I use it to manage several Zuli sm
 running various schedules for lights at home.) Whatever you use it for, I hope
 you will find it to be useful in your hacking ;)
 
+## Installation
+
+```
+pip install zuli
+```
+
 ## How to use
 
-Make sure you are in the `src` directory and run `python zuli.py` to open a simple command prompt. This utility does not run as a standalone command as you might expect. This design allows BLE connections with devices to be kept open in between commands.
+This utility does not run as a standalone command as you might expect. This design allows BLE connections with devices to be kept open in between commands. To start the utility:
+
+```
+python -m zuli
+```
 
 > [!NOTE]
 > macOS users must give Terminal (or your app of choice) Bluetooth access for this utility to work.
