@@ -1,12 +1,16 @@
 import asyncio
-import zcs
+import protocol
 import smartplug
 import sys
 import argparse
-import argparsei
 from datetime import time
 from bleak import BleakScanner
 from bleak import BleakClient
+
+class InteractiveArgumentParser(argparse.ArgumentParser):
+    def exit(self, status=0, message=None): # pyright: ignore[reportIncompatibleMethodOverride]
+        if message:
+            raise argparse.ArgumentError(argument=None, message=message)
 
 def filter_devices(devices: dict[str, BleakClient], addresses: list[str]):
     # An empty list of addresses returns all devices
@@ -32,8 +36,12 @@ def wrap_method(smartplug_func):
         command_devices = filter_devices(devices, args.devices)
         method_params = args.params(args) if hasattr(args, 'params') else []
         async for result in smartplug_func(command_devices, *method_params):
-            if isinstance(result, bytearray):
-                print(result.hex())
+            device = result[0] if isinstance(result, tuple) else None
+            result = result[1] if isinstance(result, tuple) else result
+            if isinstance(result, bool):
+                result = "Success" if result else "Failure"
+            if device != None:
+                print(f"{device.address} : {result}")
             else:
                 print(result)
     return do
@@ -48,10 +56,10 @@ async def ainput(prompt: str) -> str:
     return (await asyncio.to_thread(sys.stdin.readline)).rstrip('\n')
     
 def configure_parser():
-    parser = argparsei.InteractiveArgumentParser(prog="zuli", exit_on_error=False)
+    parser = InteractiveArgumentParser(prog="zuli", exit_on_error=False)
     subparsers = parser.add_subparsers()
 
-    parent_parser = argparsei.InteractiveArgumentParser(add_help=False)
+    parent_parser = InteractiveArgumentParser(add_help=False)
     parent_parser.add_argument('-d', '--devices', action='extend', nargs='*',
                                type=str, default=[])
 
@@ -93,9 +101,9 @@ def configure_parser():
     parser_schedule_add.add_argument('time', type=time.fromisoformat)
     parser_schedule_add.add_argument('action', choices=['on', 'off'])
     def schedule_params(a):
-        return [zcs.Schedule(time=a.time, action=zcs.Schedule.ACTION_OFF
+        return [protocol.Schedule(time=a.time, action=protocol.ScheduleAction.OFF
                                             if a.action == "off"
-                                            else zcs.Schedule.ACTION_ON)]
+                                            else protocol.ScheduleAction.ON)]
     parser_schedule_add.set_defaults(func=wrap_method(smartplug.add_schedule),
                                         params=schedule_params)
     
@@ -107,18 +115,33 @@ def configure_parser():
     return parser
 
 async def main():
-    devices = {}
+    devices: dict[str, BleakClient] = {}
+
     async def discover():
-        async with BleakScanner(service_uuids=[zcs.ZULI_SERVICE]) as scanner:
-            connect_tasks = set()
-            async for (device, advertisement_data) in scanner.advertisement_data():
-                if device.address not in devices:
-                    client = BleakClient(device)
-                    devices[device.address] = client
-                    task = asyncio.create_task(client.connect())
-                    connect_tasks.add(task)
-                    task.add_done_callback(connect_tasks.discard)
+        try:
+            async with BleakScanner(service_uuids=[protocol.ZULI_SERVICE]) as scanner:
+                async with asyncio.TaskGroup() as tg:
+                    async for (device, advertisement_data) in scanner.advertisement_data():
+                        if device.address not in devices or not devices[device.address].is_connected:
+                            client = BleakClient(device)
+                            devices[device.address] = client
+
+                            async def try_connect(client: BleakClient):
+                                try:
+                                    await client.connect()
+                                except Exception as e:
+                                    root_e = e
+                                    while root_e != None:
+                                        if isinstance(root_e, asyncio.CancelledError):
+                                            return
+                                        else:
+                                            root_e = root_e.__cause__ or root_e.__context__
+                                    raise e
+                            tg.create_task(try_connect(client))
+        except asyncio.CancelledError:
+            return
     discovery_task = asyncio.create_task(discover())
+
     try:
         print("Ready. Devices will continue to connect in the background")
         parser = configure_parser()
@@ -131,13 +154,16 @@ async def main():
             try:
                 args = parser.parse_args(command.split())
                 if hasattr(args, 'func'):
-                    await args.func(args, devices)
+                    active_devices = {key: value for key, value in devices.items() if value.is_connected}
+                    await args.func(args, active_devices)
             except Exception as e:
                 print(e)
     except Exception as e:
         print(e)
     finally:
-        print(f"Closing all connections")
+        print(f"Stopping discovery and closing all connections")
+        discovery_task.cancel()
+        await discovery_task
         await asyncio.gather(*[client.disconnect()
                                 for client in devices.values()])
 
