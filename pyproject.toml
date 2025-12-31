@@ -4,9 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "zuli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
     "bleak",
+    "bleak-retry-connector"
 ]
 authors = [
   { name="Brigham Byerly" },
