@@ -1,5 +1,5 @@
 from typing import Awaitable, Callable, Optional, TypeVar
-import protocol
+from . import protocol
 import asyncio
 from datetime import datetime
 from bleak import BleakClient
@@ -57,7 +57,7 @@ async def _send_commands(clients: list[BleakClient],
         except Exception:
             return (client, decode_response(None))
     pending_commands = [send_command_wrap(client, encode_message, decode_response) for client in clients]
-    async for result in asyncio.as_completed(pending_commands):
+    for result in asyncio.as_completed(pending_commands):
         yield await result
 
 def on(clients: list[BleakClient], brightness=0):
@@ -106,7 +106,8 @@ async def get_clients_schedules(clients: list[BleakClient]):
     async def get_schedules_wrapper(client: BleakClient):
         schedules = [schedule async for schedule in get_client_schedules(client) if schedule != None]
         return (client, schedules)
-    async for result in asyncio.as_completed([get_schedules_wrapper(client) for client in clients]):
+    get_schedules_each_client = [get_schedules_wrapper(client) for client in clients]
+    for result in asyncio.as_completed(get_schedules_each_client):
         yield await result
 
 async def remove_client_schedule(clients: list[BleakClient], i: int):

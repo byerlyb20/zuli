@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "zuli"
+version = "0.0.1"
+dependencies = [
+    "bleak",
+]
+authors = [
+  { name="Brigham Byerly" },
+]
+description = "An implementation of the BLE protocol for controlling Zuli smartplugs"
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "MIT"
+license-files = ["LICENSE*"]
+
+[project.urls]
+Homepage = "https://github.com/byerlyb20/zuli"
+Issues = "https://github.com/byerlyb20/zuli/issues"

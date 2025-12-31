@@ -1,6 +1,6 @@
+from . import protocol
+from . import smartplug
 import asyncio
-import protocol
-import smartplug
 import sys
 import argparse
 from datetime import time
@@ -59,7 +59,7 @@ def wrap_method(smartplug_func):
     return do
     
 async def list_devices(args: argparse.Namespace,
-                       devices: dict[str, BleakClient]):
+                    devices: dict[str, BleakClient]):
     for client in devices.values():
         print(client.address)
 
@@ -73,7 +73,7 @@ def configure_parser():
 
     parent_parser = InteractiveArgumentParser(add_help=False)
     parent_parser.add_argument('-d', '--devices', action='extend', nargs='+',
-                               type=str, default=[])
+                            type=str, default=[])
 
     parser_on = subparsers.add_parser('on', parents=[parent_parser])
     parser_on.add_argument('brightness', nargs='?', default=0, type=int)
@@ -103,7 +103,7 @@ def configure_parser():
     parser_schedule.set_defaults(func=wrap_method(smartplug.get_clients_schedules))
 
     parser_schedule_remove = subparsers.add_parser('remove_schedule',
-                                                   parents=[parent_parser])
+                                                parents=[parent_parser])
     parser_schedule_remove.add_argument('schedule', type=int)
     parser_schedule_remove.set_defaults(func=wrap_method(smartplug.remove_client_schedule),
                                         params=lambda a : [a.schedule])
