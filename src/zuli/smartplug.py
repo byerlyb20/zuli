@@ -15,6 +15,8 @@ class MalformedCommandError(Exception):
     pass
 
 T = TypeVar('T')
+EncoderOrMessage = Callable[[BleakClient], Awaitable[bytearray | None]] | bytearray
+Decoder = Callable[[bytearray | None], T]
 
 def decode_response_success(response: bytearray | None) -> bool:
     if response == None:
@@ -30,9 +32,8 @@ def decode_nullable_response_wrapper(decode_fun: Callable[[bytearray], T]) -> Ca
             return decode_fun(response)
     return decode_nullable_response
 
-async def _send_command(client: BleakClient,
-                        encode_message: Callable[[BleakClient], Awaitable[bytearray | None]] | bytearray,
-                        decode_response: Callable[[bytearray | None], T] = decode_response_success
+async def _send_command(client: BleakClient, encode_message: EncoderOrMessage,
+                        decode_response: Decoder[T] = decode_response_success
                         ) -> T:
     message = await encode_message(client) if callable(encode_message) else encode_message
     if message == None:
@@ -43,23 +44,21 @@ async def _send_command(client: BleakClient,
     return decode_response(raw_response)
 
 async def _send_commands(clients: list[BleakClient],
-                        encode_message: Callable[[BleakClient], Awaitable[bytearray]] | bytearray,
-                        decode_response: Callable[[bytearray | None], T] = decode_response_success
+                        encode_message: EncoderOrMessage,
+                        decode_response: Decoder[T] = decode_response_success
                         ) -> AsyncGenerator[tuple[BleakClient, T]]:
-    response_queue = asyncio.Queue()
-    tasks = set()
-    for client in clients:
-        task = asyncio.create_task(_send_command(client, encode_message, decode_response))
-        tasks.add(task)
-        def done_callback(task, c=client):
-            try:
-                response_queue.put_nowait((c, task.result()))
-            except Exception:
-                # Ignore exceptions
-                response_queue.put_nowait((c, decode_response(None)))
-        task.add_done_callback(done_callback)
-    for i in range(len(clients)):
-        yield await response_queue.get()
+    async def send_command_wrap(client: BleakClient,
+                                encode_message: EncoderOrMessage,
+                                decode_response: Decoder[T]
+                                ) -> tuple[BleakClient, T]:
+        try:
+            result = await _send_command(client, encode_message, decode_response)
+            return (client, result)
+        except Exception:
+            return (client, decode_response(None))
+    pending_commands = [send_command_wrap(client, encode_message, decode_response) for client in clients]
+    async for result in asyncio.as_completed(pending_commands):
+        yield await result
 
 def on(clients: list[BleakClient], brightness=0):
     return _send_commands(clients, protocol.encode_on(brightness))
@@ -91,16 +90,24 @@ async def get_schedule(client: BleakClient, i: int):
                          protocol.encode_get_schedule(i),
                          decode_nullable_response_wrapper(protocol.decode_get_schedule))
 
-async def get_client_schedule_info(client: BleakClient):
-    return await _send_command(client,
-                               protocol.encode_get_schedule_info(),
-                               decode_nullable_response_wrapper(protocol.decode_get_schedule_info))
+def get_client_schedule_info(clients: list[BleakClient]):
+    return _send_commands(clients,
+                          protocol.encode_get_schedule_info(),
+                          decode_nullable_response_wrapper(protocol.decode_get_schedule_info))
 
 async def get_client_schedules(client: BleakClient):
-    schedule_info = await get_client_schedule_info(client)
+    schedule_info_result = await anext(get_client_schedule_info([client]))
+    schedule_info = schedule_info_result[1]
     num_schedules = schedule_info['num_schedules'] if schedule_info != None else 0
     for i in range(1, num_schedules + 1):
         yield await get_schedule(client, i)
+
+async def get_clients_schedules(clients: list[BleakClient]):
+    async def get_schedules_wrapper(client: BleakClient):
+        schedules = [schedule async for schedule in get_client_schedules(client) if schedule != None]
+        return (client, schedules)
+    async for result in asyncio.as_completed([get_schedules_wrapper(client) for client in clients]):
+        yield await result
 
 async def remove_client_schedule(clients: list[BleakClient], i: int):
     async def encode_remove_ith_schedule(client: BleakClient) -> bytearray | None:
