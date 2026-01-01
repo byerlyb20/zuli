@@ -1,3 +1,4 @@
+import threading
 from typing import Awaitable, Callable, TypeVar
 from . import protocol
 from datetime import datetime
@@ -20,6 +21,8 @@ def decode_response_success(response: bytearray) -> bool:
 
 class ZuliSmartplug():
 
+    __lock = threading.Lock()
+
     def __init__(self, device: BLEDevice):
         self._device: BLEDevice = device
         self._client: BleakClient | None = None
@@ -31,7 +34,8 @@ class ZuliSmartplug():
             return await establish_connection(
                 BleakClientWithServiceCache,
                 self._device,
-                self._device.name or self._device.address
+                self._device.name or self._device.address,
+                max_attempts=3
             )
     
     async def _send_command(
@@ -39,19 +43,20 @@ class ZuliSmartplug():
         encode_message: EncoderOrMessage,
         decode_response: Decoder[T] = decode_response_success
     ) -> T:
-        client = await self.__get_connected_client()
+        with self.__lock:
+            client = await self.__get_connected_client()
 
-        # Encode and send message
-        message = await encode_message(client) if callable(encode_message) else encode_message
-        await client.write_gatt_char(protocol.COMMAND_PIPE, data=message,
-                                    response=True)
-        
-        # Read and decode response
-        raw_response = await client.read_gatt_char(protocol.COMMAND_PIPE)
-        try:
-            return decode_response(raw_response)
-        except Exception as e:
-            raise UnexpectedResponseError() from e
+            # Encode and send message
+            message = await encode_message(client) if callable(encode_message) else encode_message
+            await client.write_gatt_char(protocol.COMMAND_PIPE, data=message,
+                                        response=True)
+            
+            # Read and decode response
+            raw_response = await client.read_gatt_char(protocol.COMMAND_PIPE)
+            try:
+                return decode_response(raw_response)
+            except Exception as e:
+                raise UnexpectedResponseError() from e
     
     async def disconnect(self):
         if self._client != None and self._client.is_connected:
