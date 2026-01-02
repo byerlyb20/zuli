@@ -39,16 +39,18 @@ class ZuliSmartplug():
             return self._device
 
     async def __get_connected_client(self) -> BleakClient:
-        if self._client and self._client.is_connected:
-            return self._client
-        else:
+        if not self._client or not self._client.is_connected:
+            # Discard old client (if it exists) and acquire a new one
+            if self._client:
+                await self._client.disconnect()
             device_handle = await self.__get_device()
-            return await establish_connection(
+            self._client = await establish_connection(
                 BleakClientWithServiceCache,
                 device_handle,
                 self._address,
                 max_attempts=self._num_retries
             )
+        return self._client
     
     async def _send_command(
         self,
@@ -71,7 +73,7 @@ class ZuliSmartplug():
                 raise UnexpectedResponseError() from e
     
     async def disconnect(self):
-        if self._client != None and self._client.is_connected:
+        if self._client:
             await self._client.disconnect()
 
     @property
