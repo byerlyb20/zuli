@@ -148,7 +148,7 @@ async def main():
             async with BleakScanner(service_uuids=[protocol.ZULI_SERVICE]) as scanner:
                 async for (device, advertisement_data) in scanner.advertisement_data():
                     if device.address not in devices:
-                        zuli_device = ZuliSmartplug(device)
+                        zuli_device = ZuliSmartplug(device.address, device)
                         devices[device.address] = zuli_device
         except asyncio.CancelledError:
             return
