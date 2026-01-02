@@ -1,4 +1,4 @@
-import threading
+import asyncio
 from typing import Awaitable, Callable, TypeVar
 from . import protocol
 from datetime import datetime
@@ -24,7 +24,7 @@ class ZuliSmartplug():
     def __init__(self, device: BLEDevice):
         self._device: BLEDevice = device
         self._client: BleakClient | None = None
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
 
     async def __get_connected_client(self) -> BleakClient:
         if self._client and self._client.is_connected:
@@ -42,7 +42,7 @@ class ZuliSmartplug():
         encode_message: EncoderOrMessage,
         decode_response: Decoder[T] = decode_response_success
     ) -> T:
-        with self._lock:
+        async with self._lock:
             client = await self.__get_connected_client()
 
             # Encode and send message
