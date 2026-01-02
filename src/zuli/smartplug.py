@@ -21,11 +21,10 @@ def decode_response_success(response: bytearray) -> bool:
 
 class ZuliSmartplug():
 
-    __lock = threading.Lock()
-
     def __init__(self, device: BLEDevice):
         self._device: BLEDevice = device
         self._client: BleakClient | None = None
+        self._lock = threading.Lock()
 
     async def __get_connected_client(self) -> BleakClient:
         if self._client and self._client.is_connected:
@@ -43,7 +42,7 @@ class ZuliSmartplug():
         encode_message: EncoderOrMessage,
         decode_response: Decoder[T] = decode_response_success
     ) -> T:
-        with self.__lock:
+        with self._lock:
             client = await self.__get_connected_client()
 
             # Encode and send message
