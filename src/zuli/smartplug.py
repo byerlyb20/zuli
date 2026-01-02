@@ -21,10 +21,11 @@ def decode_response_success(response: bytearray) -> bool:
 
 class ZuliSmartplug():
 
-    def __init__(self, device: BLEDevice):
+    def __init__(self, device: BLEDevice, num_retries: int = 3):
         self._device: BLEDevice = device
         self._client: BleakClient | None = None
         self._lock = asyncio.Lock()
+        self._num_retries = num_retries
 
     async def __get_connected_client(self) -> BleakClient:
         if self._client and self._client.is_connected:
@@ -34,7 +35,7 @@ class ZuliSmartplug():
                 BleakClientWithServiceCache,
                 self._device,
                 self._device.name or self._device.address,
-                max_attempts=3
+                max_attempts=self._num_retries
             )
     
     async def _send_command(
